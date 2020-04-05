@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.IO;
 using System.Net;
@@ -17,29 +18,25 @@ namespace GoogleReCaptchaIntegration.Controllers
 
         public IActionResult Index() => View();
 
+        private const string GoogleApiUrl = "https://www.google.com/recaptcha/api/siteverify?secret={0}&response={1}";
         private bool Validate(string token, string secretKey)
         {
-            var apiUrl = "https://www.google.com/recaptcha/api/siteverify?secret={0}&response={1}";
-            var requestUri = string.Format(apiUrl, secretKey, token);
-            var request = (HttpWebRequest)WebRequest.Create(requestUri);
-
-            using (WebResponse response = request.GetResponse())
+            var req = WebRequest.Create(string.Format(GoogleApiUrl, secretKey, token)) as HttpWebRequest;
+            using (WebResponse response = req.GetResponse())
+            using (StreamReader stream = new StreamReader(response.GetResponseStream()))
             {
-                using (StreamReader stream = new StreamReader(response.GetResponseStream()))
-                {
-                    JObject jResponse = JObject.Parse(stream.ReadToEnd());
-                    var isSuccess = jResponse.Value<bool>("success");
-                    var score = jResponse.Value<double>("score");
-                    if (isSuccess && jResponse.ContainsKey("score"))
-                    {
-                        return jResponse.Value<double>("score") > 0.5;
-                    }
-                    else
-                    {
-                        return isSuccess;
-                    }
-                }
+                JObject jObjectResponse = JObject.Parse(stream.ReadToEnd());
+                var dto = jObjectResponse.ToObject<GoogleResponseDTO>();
+                return dto.IsSuccess;
             }
+        }
+
+        public class GoogleResponseDTO
+        {
+            [JsonProperty("success")]
+            public bool IsSuccess { get; set; }
+            [JsonProperty("score")]
+            public double? Score { get; set; }
         }
 
         [HttpPost]
